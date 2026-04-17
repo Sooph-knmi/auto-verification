@@ -1,0 +1,109 @@
+dates:
+  start: null
+  end: null
+  # end: 2021-09-30 18:00:00
+  period: 6h
+  range: 48h
+  step: 6h
+
+datasets:
+  uwcw_ens:
+    loader: bris-inference
+    files: null
+    ens_size: 9
+    variables: ["air_temperature_2m", "wind_speed_10m", "air_pressure_at_sea_level", "precipitation_amount"]
+  obs:
+    loader: harp-obstable
+    files: /leonardo_work/DestE_340_26/users/sbuurman/verification/data/synop_2025/synop_2025.sqlite
+    #/leonardo_work/DestE_330_25/users/multi-domain/synop-stations/metcoop_obs/OBSTABLE_2025.sqlite
+    variables: [TA, FF, FG_1, RR_6]
+    start_date: null
+    end_date: null
+    #["T2m", "S10m", "Pmsl", "AccPcp6h"] #, "AccPcp6h"
+
+transformations:
+  rename:
+    rename_dict: 
+      tp: ["precipitation_amount", AccPcp6h, RR_6]
+      2t: [air_temperature_2m, T2m, TA]
+      # 10u: [x_wind_10m]
+      # 10v: [y_wind_10m]
+      10si: [wind_speed_10m, S10m, FF]
+      # msl: [air_pressure_at_sea_level, Pmsl]
+      # z_500: [geopotential_pl]
+      # 2d: [dewpoint_temperature_2m]
+
+  kelvin_to_celcius:
+    datasets:
+      - uwcw_ens
+    variables: [2t]
+
+alignment:
+  broadcast_nans: False
+  reference: obs
+  time:
+    return_as: forecast
+  space:
+    interpolation:
+      method: delaunay
+      max_distance: 2
+  # save:
+  #   method: to_netcdf
+  #   datasets: forecast
+  #   path: "/leonardo_work/DestE_340_26/users/sbuurman/verification/data/plots/{name}.nc"
+
+verification:
+  reference: obs #SYNOP
+  metrics:
+    bss:
+      function: mxalign.metrics.brier_skill_score
+      inputs:
+        obs: reference
+        fcst: forecast
+      event_thresholds: 
+        10si: [0,0.5,1,1.5,2,2.5,3,4,5,6,7,8,9,10]
+        tp: [0.0001, 0.05, 0.1, 1, 2, 3, 4, 5]
+        2t: [10,11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
+      ensemble_member_dim: "member"
+    spread-skill:
+      function: mxalign.metrics.spread_skill
+      inputs:
+        observations: reference
+        forecasts: forecast
+      dim: ["point_index", "reference_time"]
+      member_dim: "member"
+    qq_plot:
+      function: mxalign.metrics.qq_plot_data
+      inputs:
+        observations: reference
+        forecasts: forecast
+      quantiles_min: 0.01
+      quantiles_max: 0.99
+      quantiles_by: 0.1
+      dim: ["point_index", "reference_time"]
+    crps:
+      function: scores.probability.crps_for_ensemble
+      inputs:
+        fcst: forecast
+        obs: reference
+      ensemble_member_dim: "member"
+      preserve_dims: ["lead_time"]
+    bse:
+      function: scores.probability.brier_score_for_ensemble
+      inputs:
+        fcst: forecast
+        obs: reference
+      event_thresholds: [0,0.5,1,1.5,2,2.5,3,4,5,6,7,8,9,10]
+      ensemble_member_dim: "member"
+      preserve_dims: ["lead_time"]
+    # spread:
+    #   function: mxalign.metrics.ensemble_spread
+    #   inputs:
+    #     fcst: forecast
+    # skill:
+    #   function: mxalign.metrics.ensemble_mean
+    #   inputs:
+    #     fcst: forecast
+  save:
+    method: to_netcdf
+    path: null
